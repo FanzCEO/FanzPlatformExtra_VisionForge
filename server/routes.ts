@@ -599,6 +599,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/stats/:creatorId", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const creator = await storage.getCreator(req.params.creatorId);
+      
+      if (!creator || creator.userId !== userId) {
+        return res.status(403).json({ message: "Unauthorized" });
+      }
+
+      const stats = await storage.getCreatorStats(creator.id);
+
+      res.json({
+        views: stats.totalViews,
+        earnings: stats.totalRevenue.toFixed(2),
+        subscribers: stats.activeSubscribers,
+        likes: stats.totalLikes,
+        posts: stats.totalPosts,
+      });
+    } catch (error) {
+      console.error("Error fetching stats:", error);
+      res.status(500).json({ message: "Failed to fetch stats" });
+    }
+  });
+
   const httpServer = createServer(app);
   
   // Setup WebSocket for live streaming

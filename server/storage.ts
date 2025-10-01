@@ -106,6 +106,15 @@ export interface IStorage {
   // Analytics operations
   getCreatorAnalytics(creatorId: string, days: number): Promise<Analytics[]>;
   updateAnalytics(creatorId: string, date: Date, updates: Partial<Analytics>): Promise<void>;
+  
+  // Aggregation operations
+  getCreatorStats(creatorId: string): Promise<{
+    totalViews: number;
+    totalLikes: number;
+    totalRevenue: number;
+    activeSubscribers: number;
+    totalPosts: number;
+  }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -478,6 +487,51 @@ export class DatabaseStorage implements IStorage {
         target: [analytics.creatorId, analytics.date],
         set: updates,
       });
+  }
+
+  // Aggregation operations
+  async getCreatorStats(creatorId: string): Promise<{
+    totalViews: number;
+    totalLikes: number;
+    totalRevenue: number;
+    activeSubscribers: number;
+    totalPosts: number;
+  }> {
+    const [postStats] = await db
+      .select({
+        totalViews: sql<number>`COALESCE(SUM(${posts.viewCount}), 0)`,
+        totalLikes: sql<number>`COALESCE(SUM(${posts.likeCount}), 0)`,
+        totalPosts: sql<number>`COUNT(*)`,
+      })
+      .from(posts)
+      .where(eq(posts.creatorId, creatorId));
+
+    const activeSubscriptions = await db
+      .select({
+        subscription: subscriptions,
+        tier: subscriptionTiers,
+      })
+      .from(subscriptions)
+      .leftJoin(subscriptionTiers, eq(subscriptions.tierId, subscriptionTiers.id))
+      .where(and(
+        eq(subscriptions.creatorId, creatorId),
+        eq(subscriptions.status, 'active')
+      ));
+
+    const totalRevenue = activeSubscriptions.reduce((sum, { tier }) => {
+      if (tier?.priceMonthly) {
+        return sum + parseFloat(tier.priceMonthly);
+      }
+      return sum;
+    }, 0);
+
+    return {
+      totalViews: postStats?.totalViews || 0,
+      totalLikes: postStats?.totalLikes || 0,
+      totalRevenue,
+      activeSubscribers: activeSubscriptions.length,
+      totalPosts: postStats?.totalPosts || 0,
+    };
   }
 }
 

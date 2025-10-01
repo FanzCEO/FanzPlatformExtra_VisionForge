@@ -73,6 +73,20 @@ export default function Feed() {
     retry: false,
   });
 
+  // Fetch real-time stats for creators
+  const { data: stats } = useQuery({
+    queryKey: [`/api/stats/${user?.creator?.id}`],
+    queryFn: async () => {
+      const res = await fetch(`/api/stats/${user?.creator?.id}`, {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to fetch stats");
+      return res.json();
+    },
+    enabled: !!user?.creator?.id,
+    retry: false,
+  });
+
   if (authLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -105,7 +119,7 @@ export default function Feed() {
                     </div>
                     <div>
                       <p className="text-xs text-muted-foreground">Views</p>
-                      <p className="font-bold">{user.creator.postCount * 1234}</p>
+                      <p className="font-bold">{stats?.views || 0}</p>
                     </div>
                   </div>
                 </div>
@@ -116,7 +130,7 @@ export default function Feed() {
                     </div>
                     <div>
                       <p className="text-xs text-muted-foreground">Earnings</p>
-                      <p className="font-bold">$0</p>
+                      <p className="font-bold">${stats?.earnings || '0.00'}</p>
                     </div>
                   </div>
                 </div>
@@ -127,7 +141,7 @@ export default function Feed() {
                     </div>
                     <div>
                       <p className="text-xs text-muted-foreground">Subscribers</p>
-                      <p className="font-bold">{user.creator.followerCount}</p>
+                      <p className="font-bold">{stats?.subscribers || 0}</p>
                     </div>
                   </div>
                 </div>
