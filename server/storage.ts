@@ -41,6 +41,7 @@ import { eq, desc, and, sql, or } from "drizzle-orm";
 export interface IStorage {
   // User operations (required for Replit Auth)
   getUser(id: string): Promise<User | undefined>;
+  getAllUsers(): Promise<User[]>;
   upsertUser(user: UpsertUser): Promise<User>;
   updateUserStripeInfo(userId: string, stripeInfo: { customerId: string; subscriptionId: string }): Promise<User>;
   
@@ -63,10 +64,12 @@ export interface IStorage {
   
   // Subscription operations
   getSubscription(userId: string, creatorId: string): Promise<Subscription | undefined>;
+  getSubscriptionByStripeId(stripeSubscriptionId: string): Promise<Subscription | undefined>;
   getUserSubscriptions(userId: string): Promise<Subscription[]>;
   getCreatorSubscriptions(creatorId: string): Promise<Subscription[]>;
   createSubscription(subscription: Omit<Subscription, "id" | "createdAt" | "updatedAt">): Promise<Subscription>;
   updateSubscription(id: string, updates: Partial<Subscription>): Promise<Subscription>;
+  updateSubscriptionStatus(id: string, status: string, periodStart: Date, periodEnd: Date): Promise<void>;
   
   // Subscription tier operations
   getSubscriptionTier(id: string): Promise<SubscriptionTier | undefined>;
@@ -150,6 +153,10 @@ export class DatabaseStorage implements IStorage {
       .where(eq(users.id, userId))
       .returning();
     return user;
+  }
+
+  async getAllUsers(): Promise<User[]> {
+    return db.select().from(users);
   }
 
   // Creator operations
@@ -269,6 +276,27 @@ export class DatabaseStorage implements IStorage {
       .where(eq(subscriptions.id, id))
       .returning();
     return subscription;
+  }
+
+  async getSubscriptionByStripeId(stripeSubscriptionId: string): Promise<Subscription | undefined> {
+    const [subscription] = await db
+      .select()
+      .from(subscriptions)
+      .where(eq(subscriptions.stripeSubscriptionId, stripeSubscriptionId));
+    
+    return subscription;
+  }
+
+  async updateSubscriptionStatus(id: string, status: string, periodStart: Date, periodEnd: Date): Promise<void> {
+    await db
+      .update(subscriptions)
+      .set({
+        status,
+        currentPeriodStart: periodStart,
+        currentPeriodEnd: periodEnd,
+        updatedAt: new Date(),
+      })
+      .where(eq(subscriptions.id, id));
   }
 
   // Subscription tier operations

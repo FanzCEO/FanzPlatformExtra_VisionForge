@@ -117,6 +117,7 @@ export const subscriptions = pgTable("subscriptions", {
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   creatorId: varchar("creator_id").notNull().references(() => creators.id, { onDelete: "cascade" }),
   tierId: varchar("tier_id").notNull().references(() => subscriptionTiers.id),
+  stripeSubscriptionId: varchar("stripe_subscription_id"),
   status: varchar("status").notNull().default("active"),
   currentPeriodStart: timestamp("current_period_start"),
   currentPeriodEnd: timestamp("current_period_end"),

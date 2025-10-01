@@ -1,4 +1,5 @@
 import type { Express } from "express";
+import express from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
@@ -336,12 +337,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Check if already subscribed
       const existing = await storage.getSubscription(userId, creatorId);
-      if (existing && existing.status === "active") {
-        const subscription = await stripe.subscriptions.retrieve(user.stripeSubscriptionId!);
-        return res.json({
-          subscriptionId: subscription.id,
-          clientSecret: (subscription.latest_invoice as any)?.payment_intent?.client_secret,
-        });
+      if (existing && existing.stripeSubscriptionId) {
+        const subscription = await stripe.subscriptions.retrieve(existing.stripeSubscriptionId);
+        
+        const isActiveStatus = ['active', 'trialing', 'past_due'].includes(subscription.status);
+        const isSameTier = subscription.items.data.some(item => item.price.id === tier.stripePriceId);
+        
+        if (isActiveStatus && isSameTier) {
+          await storage.updateSubscriptionStatus(
+            existing.id,
+            subscription.status,
+            new Date(subscription.current_period_start * 1000),
+            new Date(subscription.current_period_end * 1000)
+          );
+
+          await storage.updateUserStripeInfo(userId, {
+            customerId: subscription.customer as string,
+            subscriptionId: subscription.id,
+          });
+          
+          return res.json({
+            subscriptionId: subscription.id,
+            clientSecret: (subscription.latest_invoice as any)?.payment_intent?.client_secret,
+          });
+        }
+
+        if (isActiveStatus && !isSameTier) {
+          const updatedSubscription = await stripe.subscriptions.update(subscription.id, {
+            items: [{
+              id: subscription.items.data[0].id,
+              price: tier.stripePriceId!,
+            }],
+            proration_behavior: 'create_prorations',
+          });
+
+          await storage.updateSubscription(existing.id, {
+            tierId,
+            status: updatedSubscription.status,
+            currentPeriodStart: new Date(updatedSubscription.current_period_start * 1000),
+            currentPeriodEnd: new Date(updatedSubscription.current_period_end * 1000),
+          });
+
+          await storage.updateUserStripeInfo(userId, {
+            customerId: updatedSubscription.customer as string,
+            subscriptionId: updatedSubscription.id,
+          });
+
+          return res.json({
+            subscriptionId: updatedSubscription.id,
+            clientSecret: (updatedSubscription.latest_invoice as any)?.payment_intent?.client_secret,
+          });
+        }
       }
 
       let customerId = user.stripeCustomerId;
@@ -367,18 +413,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         subscriptionId: subscription.id 
       });
 
-      const now = new Date();
-      const periodEnd = new Date(now);
-      periodEnd.setMonth(periodEnd.getMonth() + 1);
-
-      await storage.createSubscription({
-        userId,
-        creatorId,
-        tierId,
-        status: "active",
-        currentPeriodStart: now,
-        currentPeriodEnd: periodEnd,
-      });
+      if (existing) {
+        await storage.updateSubscription(existing.id, {
+          tierId,
+          stripeSubscriptionId: subscription.id,
+          status: subscription.status,
+          currentPeriodStart: new Date(subscription.current_period_start * 1000),
+          currentPeriodEnd: new Date(subscription.current_period_end * 1000),
+        });
+      } else {
+        await storage.createSubscription({
+          userId,
+          creatorId,
+          tierId,
+          stripeSubscriptionId: subscription.id,
+          status: subscription.status,
+          currentPeriodStart: new Date(subscription.current_period_start * 1000),
+          currentPeriodEnd: new Date(subscription.current_period_end * 1000),
+        });
+      }
 
       res.json({
         subscriptionId: subscription.id,
@@ -387,6 +440,91 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("Error creating subscription:", error);
       res.status(500).json({ message: error.message || "Failed to create subscription" });
+    }
+  });
+
+  app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), async (req, res) => {
+    if (!stripe) {
+      return res.status(503).json({ message: "Stripe is not configured" });
+    }
+
+    const sig = req.headers["stripe-signature"];
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+    if (!sig) {
+      return res.status(400).json({ message: "Missing stripe-signature header" });
+    }
+
+    if (!webhookSecret) {
+      return res.status(503).json({ message: "STRIPE_WEBHOOK_SECRET is required for webhook processing" });
+    }
+
+    let event: Stripe.Event;
+
+    try {
+      event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
+    } catch (err: any) {
+      console.error("Webhook signature verification failed:", err.message);
+      return res.status(400).json({ message: `Webhook Error: ${err.message}` });
+    }
+
+    try {
+      switch (event.type) {
+        case "customer.subscription.created":
+        case "customer.subscription.updated": {
+          const subscription = event.data.object as Stripe.Subscription;
+          
+          const existingSubscription = await storage.getSubscriptionByStripeId(subscription.id);
+          if (existingSubscription) {
+            await storage.updateSubscriptionStatus(
+              existingSubscription.id,
+              subscription.status,
+              new Date(subscription.current_period_start * 1000),
+              new Date(subscription.current_period_end * 1000)
+            );
+          } else {
+            console.warn("Subscription not found in database for Stripe ID:", subscription.id);
+          }
+          break;
+        }
+
+        case "customer.subscription.deleted": {
+          const subscription = event.data.object as Stripe.Subscription;
+          const existingSubscription = await storage.getSubscriptionByStripeId(subscription.id);
+          
+          if (existingSubscription) {
+            await storage.updateSubscriptionStatus(
+              existingSubscription.id,
+              "canceled",
+              new Date(subscription.current_period_start * 1000),
+              new Date(subscription.current_period_end * 1000)
+            );
+          } else {
+            console.warn("Subscription not found in database for Stripe ID:", subscription.id);
+          }
+          break;
+        }
+
+        case "invoice.payment_succeeded": {
+          const invoice = event.data.object as Stripe.Invoice;
+          console.log("Payment succeeded for invoice:", invoice.id);
+          break;
+        }
+
+        case "invoice.payment_failed": {
+          const invoice = event.data.object as Stripe.Invoice;
+          console.error("Payment failed for invoice:", invoice.id);
+          break;
+        }
+
+        default:
+          console.log(`Unhandled event type: ${event.type}`);
+      }
+
+      res.json({ received: true });
+    } catch (error) {
+      console.error("Error processing webhook:", error);
+      res.status(500).json({ message: "Webhook processing failed" });
     }
   });
 
