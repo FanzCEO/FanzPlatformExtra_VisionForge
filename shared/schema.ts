@@ -156,6 +156,8 @@ export const posts = pgTable("posts", {
   thumbnailUrl: varchar("thumbnail_url"),
   duration: integer("duration"),
   hasWatermark: boolean("has_watermark").default(false),
+  watermarkId: varchar("watermark_id"),
+  watermarkMetadata: text("watermark_metadata"),
   likeCount: integer("like_count").default(0),
   commentCount: integer("comment_count").default(0),
   shareCount: integer("share_count").default(0),

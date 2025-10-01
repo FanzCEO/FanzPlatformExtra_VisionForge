@@ -148,6 +148,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Creator profile required" });
       }
 
+      let watermarkId: string | undefined;
+      let watermarkMetadata: string | undefined;
+
+      if (req.body.hasWatermark) {
+        const { watermarkService } = await import("./watermark");
+        const metadata = watermarkService.createWatermarkMetadata(
+          creator.id,
+          creator.username
+        );
+        watermarkId = metadata.watermarkId;
+        watermarkMetadata = watermarkService.encodeWatermarkInMetadata(metadata);
+      }
+
       const postData = {
         creatorId: creator.id,
         contentType: req.body.contentType,
@@ -157,6 +170,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         thumbnailUrl: req.body.thumbnailUrl,
         duration: req.body.duration,
         hasWatermark: req.body.hasWatermark || false,
+        watermarkId,
+        watermarkMetadata,
       };
 
       const post = await storage.createPost(postData);
@@ -164,6 +179,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error creating post:", error);
       res.status(500).json({ message: "Failed to create post" });
+    }
+  });
+
+  app.post("/api/watermark/verify", async (req, res) => {
+    try {
+      const { watermarkId, postId } = req.body;
+      
+      if (!watermarkId || !postId) {
+        return res.status(400).json({ message: "Missing watermark ID or post ID" });
+      }
+
+      const post = await storage.getPost(postId);
+      
+      if (!post) {
+        return res.status(404).json({ message: "Post not found" });
+      }
+
+      if (!post.hasWatermark || !post.watermarkMetadata || !post.watermarkId) {
+        return res.status(400).json({ message: "Post does not have watermark protection" });
+      }
+
+      if (post.watermarkId !== watermarkId) {
+        return res.status(400).json({ message: "Watermark ID mismatch" });
+      }
+
+      const { watermarkService } = await import("./watermark");
+      const metadata = watermarkService.decodeWatermarkMetadata(post.watermarkMetadata);
+
+      if (!metadata) {
+        return res.status(500).json({ message: "Failed to decode watermark metadata" });
+      }
+
+      if (metadata.watermarkId !== post.watermarkId) {
+        return res.status(400).json({ message: "Watermark metadata does not match stored ID" });
+      }
+
+      const isValid = watermarkService.verifyWatermark(metadata);
+
+      if (isValid) {
+        res.json({
+          valid: true,
+          creatorId: metadata.creatorId,
+          creatorUsername: metadata.creatorUsername,
+          timestamp: metadata.timestamp,
+          watermarkId: metadata.watermarkId,
+        });
+      } else {
+        res.json({ 
+          valid: false,
+          message: "Watermark signature verification failed"
+        });
+      }
+    } catch (error) {
+      console.error("Error verifying watermark:", error);
+      res.status(500).json({ message: "Failed to verify watermark" });
     }
   });
 
