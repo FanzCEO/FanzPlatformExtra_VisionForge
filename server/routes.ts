@@ -7,13 +7,9 @@ import { ObjectPermission } from "./objectAcl";
 import { liveStreamingService } from "./liveStreaming";
 import Stripe from "stripe";
 
-if (!process.env.STRIPE_SECRET_KEY) {
-  throw new Error("Missing required Stripe secret: STRIPE_SECRET_KEY");
-}
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-  apiVersion: "2023-10-16",
-});
+const stripe = process.env.STRIPE_SECRET_KEY 
+  ? new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: "2023-10-16" })
+  : null;
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Auth middleware
@@ -250,6 +246,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/create-subscription", isAuthenticated, async (req: any, res) => {
     try {
+      if (!stripe) {
+        return res.status(503).json({ message: "Payment processing is currently unavailable. Please configure Stripe API keys." });
+      }
+
       const userId = req.user.claims.sub;
       const user = await storage.getUser(userId);
       
