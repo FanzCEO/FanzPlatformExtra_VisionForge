@@ -9,7 +9,7 @@ import { liveStreamingService } from "./liveStreaming";
 import Stripe from "stripe";
 
 const stripe = process.env.STRIPE_SECRET_KEY 
-  ? new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: "2023-10-16" })
+  ? new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: "2025-09-30.clover" })
   : null;
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -347,8 +347,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           await storage.updateSubscriptionStatus(
             existing.id,
             subscription.status,
-            new Date(subscription.current_period_start * 1000),
-            new Date(subscription.current_period_end * 1000)
+            new Date(subscription.items.data[0].current_period_start * 1000),
+            new Date(subscription.items.data[0].current_period_end * 1000)
           );
 
           await storage.updateUserStripeInfo(userId, {
@@ -374,8 +374,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           await storage.updateSubscription(existing.id, {
             tierId,
             status: updatedSubscription.status,
-            currentPeriodStart: new Date(updatedSubscription.current_period_start * 1000),
-            currentPeriodEnd: new Date(updatedSubscription.current_period_end * 1000),
+            currentPeriodStart: new Date(updatedSubscription.items.data[0].current_period_start * 1000),
+            currentPeriodEnd: new Date(updatedSubscription.items.data[0].current_period_end * 1000),
           });
 
           await storage.updateUserStripeInfo(userId, {
@@ -418,8 +418,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           tierId,
           stripeSubscriptionId: subscription.id,
           status: subscription.status,
-          currentPeriodStart: new Date(subscription.current_period_start * 1000),
-          currentPeriodEnd: new Date(subscription.current_period_end * 1000),
+          currentPeriodStart: new Date(subscription.items.data[0].current_period_start * 1000),
+          currentPeriodEnd: new Date(subscription.items.data[0].current_period_end * 1000),
         });
       } else {
         await storage.createSubscription({
@@ -428,8 +428,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           tierId,
           stripeSubscriptionId: subscription.id,
           status: subscription.status,
-          currentPeriodStart: new Date(subscription.current_period_start * 1000),
-          currentPeriodEnd: new Date(subscription.current_period_end * 1000),
+          currentPeriodStart: new Date(subscription.items.data[0].current_period_start * 1000),
+          currentPeriodEnd: new Date(subscription.items.data[0].current_period_end * 1000),
         });
       }
 
@@ -479,8 +479,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             await storage.updateSubscriptionStatus(
               existingSubscription.id,
               subscription.status,
-              new Date(subscription.current_period_start * 1000),
-              new Date(subscription.current_period_end * 1000)
+              new Date(subscription.items.data[0].current_period_start * 1000),
+              new Date(subscription.items.data[0].current_period_end * 1000)
             );
           } else {
             console.warn("Subscription not found in database for Stripe ID:", subscription.id);
@@ -496,8 +496,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             await storage.updateSubscriptionStatus(
               existingSubscription.id,
               "canceled",
-              new Date(subscription.current_period_start * 1000),
-              new Date(subscription.current_period_end * 1000)
+              new Date(subscription.items.data[0].current_period_start * 1000),
+              new Date(subscription.items.data[0].current_period_end * 1000)
             );
           } else {
             console.warn("Subscription not found in database for Stripe ID:", subscription.id);
