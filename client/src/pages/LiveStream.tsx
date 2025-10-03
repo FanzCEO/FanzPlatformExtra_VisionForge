@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useSearchParams } from "wouter";
+import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
@@ -16,7 +16,8 @@ interface ChatMessage {
 }
 
 export default function LiveStream() {
-  const [searchParams] = useSearchParams();
+  const [location] = useLocation();
+  const searchParams = new URLSearchParams(location ? location.split('?')[1] || '' : '');
   const streamId = searchParams.get("stream");
   const { user, isLoading: authLoading } = useAuth();
   const { toast } = useToast();
