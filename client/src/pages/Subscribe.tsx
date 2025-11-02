@@ -10,13 +10,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import { loadStripe } from "@stripe/stripe-js";
-import { Check, Crown } from "lucide-react";
+import { Check, Crown, AlertCircle } from "lucide-react";
 
-if (!import.meta.env.VITE_STRIPE_PUBLIC_KEY) {
-  throw new Error("Missing required Stripe key: VITE_STRIPE_PUBLIC_KEY");
-}
-
-const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLIC_KEY);
+const stripePromise = import.meta.env.VITE_STRIPE_PUBLIC_KEY 
+  ? loadStripe(import.meta.env.VITE_STRIPE_PUBLIC_KEY)
+  : null;
 
 function SubscribeForm({ tierId, creatorId }: { tierId: string; creatorId: string }) {
   const stripe = useStripe();
@@ -137,6 +135,34 @@ export default function Subscribe() {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="animate-spin w-12 h-12 border-4 border-primary border-t-transparent rounded-full" />
+      </div>
+    );
+  }
+
+  if (!stripePromise) {
+    return (
+      <div className="min-h-screen bg-background pb-20 xl:pb-0">
+        <NavigationHeader />
+        <main className="pt-16">
+          <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <Card className="border-yellow-500/50">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <AlertCircle className="w-6 h-6 text-yellow-500" />
+                  Payment Processing Unavailable
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground mb-4">
+                  Subscriptions are currently unavailable because payment processing is not configured.
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  The site administrator needs to configure Stripe API keys to enable subscription payments.
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+        </main>
       </div>
     );
   }
