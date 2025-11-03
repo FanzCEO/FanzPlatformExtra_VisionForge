@@ -63,10 +63,10 @@ Preferred communication style: Simple, everyday language.
 - CORS and security headers configuration
 
 **Authentication Flow:**
-- Replit Auth using OpenID Connect (OIDC) protocol
+- Email/password authentication using Passport.js Local Strategy
 - Session-based authentication with PostgreSQL session store
-- Automatic token refresh and session management
-- User profile syncing from OIDC claims to local database
+- Password hashing with bcrypt (10 salt rounds)
+- Secure session cookies (httpOnly, secure in production)
 
 **Real-time Communication:**
 - WebSocket server mounted at `/ws` path
@@ -114,7 +114,8 @@ Preferred communication style: Simple, everyday language.
 ### External Dependencies
 
 **Authentication & Identity:**
-- Replit Auth (OpenID Connect) - Primary authentication provider
+- Email/Password authentication with Passport.js Local Strategy
+- Bcrypt for secure password hashing (10 salt rounds)
 - Session management via `connect-pg-simple` with PostgreSQL backing
 
 **Payment Processing:**
@@ -143,11 +144,8 @@ Preferred communication style: Simple, everyday language.
 
 **Environment Variables Required:**
 - `DATABASE_URL` - PostgreSQL connection string
-- `SESSION_SECRET` - Session encryption key
-- `STRIPE_SECRET_KEY` - Stripe API key for backend
-- `VITE_STRIPE_PUBLIC_KEY` - Stripe publishable key for frontend
-- `REPL_ID` - Replit deployment identifier
-- `ISSUER_URL` - OIDC provider URL (defaults to Replit)
-- `REPLIT_DOMAINS` - Allowed domains for OIDC redirect
+- `SESSION_SECRET` - Session encryption key (required for secure sessions)
+- `STRIPE_SECRET_KEY` - Stripe API key for backend (optional)
+- `VITE_STRIPE_PUBLIC_KEY` - Stripe publishable key for frontend (optional)
 
-**Rationale:** Replit Auth reduces authentication complexity while maintaining security. Stripe handles payment compliance and international transactions. Google Cloud Storage provides enterprise-grade reliability for media assets. Radix UI ensures accessibility compliance, while Shadcn provides rapid development without vendor lock-in.
+**Rationale:** Email/password authentication provides full control and simplicity. Bcrypt with 10 salt rounds ensures secure password storage. Stripe handles payment compliance and international transactions. Google Cloud Storage provides enterprise-grade reliability for media assets. Radix UI ensures accessibility compliance, while Shadcn provides rapid development without vendor lock-in.
