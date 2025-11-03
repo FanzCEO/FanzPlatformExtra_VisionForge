@@ -2,7 +2,7 @@ import type { Express } from "express";
 import express from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { setupAuth, isAuthenticated } from "./replitAuth";
+import { setupAuth, isAuthenticated } from "./localAuth";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import { ObjectPermission } from "./objectAcl";
 import { liveStreamingService } from "./liveStreaming";
@@ -19,7 +19,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ==================== AUTH ROUTES ====================
   app.get("/api/auth/user", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const user = await storage.getUser(userId);
       
       if (!user) {
@@ -29,7 +29,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Check if user has a creator profile
       const creator = await storage.getCreatorByUserId(userId);
       
-      res.json({ ...user, creator });
+      // Return user without password
+      const { password, ...userWithoutPassword } = user;
+      res.json({ ...userWithoutPassword, creator });
     } catch (error) {
       console.error("Error fetching user:", error);
       res.status(500).json({ message: "Failed to fetch user" });
@@ -39,7 +41,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ==================== CREATOR ROUTES ====================
   app.post("/api/creators", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       
       // Check if creator profile already exists
       const existing = await storage.getCreatorByUserId(userId);
@@ -88,7 +90,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put("/api/creators/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const creator = await storage.getCreator(req.params.id);
       
       if (!creator || creator.userId !== userId) {
@@ -142,7 +144,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/posts", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const creator = await storage.getCreatorByUserId(userId);
       
       if (!creator) {
@@ -259,7 +261,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ==================== LIKE ROUTES ====================
   app.post("/api/posts/:postId/like", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const postId = req.params.postId;
 
       const existing = await storage.getLike(userId, postId);
@@ -289,7 +291,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/posts/:postId/comments", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const commentData = {
         userId,
         postId: req.params.postId,
@@ -321,7 +323,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(503).json({ message: "Payment processing is currently unavailable. Please configure Stripe API keys." });
       }
 
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const user = await storage.getUser(userId);
       
       if (!user) {
@@ -541,7 +543,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/live-streams", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const creator = await storage.getCreatorByUserId(userId);
       
       if (!creator) {
@@ -566,7 +568,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put("/api/live-streams/:id/start", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const creator = await storage.getCreatorByUserId(userId);
       
       if (!creator) {
@@ -593,7 +595,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ==================== MESSAGE ROUTES ====================
   app.get("/api/messages/conversations", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const conversations = await storage.getUserConversations(userId);
       res.json(conversations);
     } catch (error) {
@@ -604,7 +606,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/messages/:userId", isAuthenticated, async (req: any, res) => {
     try {
-      const currentUserId = req.user.claims.sub;
+      const currentUserId = req.user.id;
       const otherUserId = req.params.userId;
       const limit = parseInt(req.query.limit as string) || 50;
 
@@ -618,7 +620,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/messages", isAuthenticated, async (req: any, res) => {
     try {
-      const senderId = req.user.claims.sub;
+      const senderId = req.user.id;
       const messageData = {
         senderId,
         receiverId: req.body.receiverId,
@@ -659,7 +661,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/forum/threads", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const threadData = {
         categoryId: req.body.categoryId,
         userId,
@@ -700,7 +702,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/forum/threads/:threadId/replies", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const replyData = {
         threadId: req.params.threadId,
         userId,
@@ -767,7 +769,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put("/api/objects/finalize", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { objectURL, visibility } = req.body;
 
       if (!objectURL) {
@@ -790,7 +792,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ==================== ANALYTICS ROUTES ====================
   app.get("/api/analytics/:creatorId", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const creator = await storage.getCreator(req.params.creatorId);
       
       if (!creator || creator.userId !== userId) {
@@ -809,7 +811,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/stats/:creatorId", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const creator = await storage.getCreator(req.params.creatorId);
       
       if (!creator || creator.userId !== userId) {
